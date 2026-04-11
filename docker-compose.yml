@@ -1,27 +1,32 @@
 version: "3.8"
 
+x-common-env: &common-env
+  - RABBITMQ_HOST=${RABBITMQ_HOST}
+  - RABBITMQ_PORT=${RABBITMQ_PORT}
+  - RABBITMQ_USER=${RABBITMQ_USER}
+  - RABBITMQ_PASS=${RABBITMQ_PASS}
+  - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+  - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
+  - REDIS_HOST=${REDIS_HOST}
+  - REDIS_PORT=${REDIS_PORT}
+  - REDIS_PASSWORD=${REDIS_PASSWORD}
+  - GEMINI_API_KEY=${GEMINI_API_KEY}
+  - UAZAPI_BASE_URL=${UAZAPI_BASE_URL}
+  - UAZAPI_TOKEN=${UAZAPI_TOKEN}
+  - UAZAPI_INSTANCE=${UAZAPI_INSTANCE}
+  - WEBHOOK_PATH=${WEBHOOK_PATH}
+  - DEBOUNCE_SECONDS=${DEBOUNCE_SECONDS}
+  - BLOCK_TTL_SECONDS=${BLOCK_TTL_SECONDS}
+  - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
+  - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
+
 services:
-  aje-bot:
+  aje-api:
     image: ghcr.io/gustavocastilho-hub/aje-de-boxe:latest
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     networks:
       - network_public
-    environment:
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
-      - RABBITMQ_PORT=${RABBITMQ_PORT}
-      - RABBITMQ_USER=${RABBITMQ_USER}
-      - RABBITMQ_PASS=${RABBITMQ_PASS}
-      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
-      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - UAZAPI_BASE_URL=${UAZAPI_BASE_URL}
-      - UAZAPI_TOKEN=${UAZAPI_TOKEN}
-      - UAZAPI_INSTANCE=${UAZAPI_INSTANCE}
-      - WEBHOOK_PATH=${WEBHOOK_PATH}
-      - DEBOUNCE_SECONDS=${DEBOUNCE_SECONDS}
-      - BLOCK_TTL_SECONDS=${BLOCK_TTL_SECONDS}
+    environment: *common-env
     deploy:
       replicas: 1
       restart_policy:
@@ -35,6 +40,18 @@ services:
         - "traefik.http.routers.aje-de-boxe.tls=true"
         - "traefik.http.routers.aje-de-boxe.tls.certresolver=letsencryptresolver"
         - "traefik.http.services.aje-de-boxe.loadbalancer.server.port=8000"
+
+  aje-worker:
+    image: ghcr.io/gustavocastilho-hub/aje-de-boxe:latest
+    command: python worker.py
+    networks:
+      - network_public
+    environment: *common-env
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
 
 networks:
   network_public:

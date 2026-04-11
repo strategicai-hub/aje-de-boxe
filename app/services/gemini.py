@@ -54,6 +54,38 @@ async def transcribe_audio(audio_bytes: bytes) -> str:
     return response.text.strip() if response.text else ""
 
 
+async def generate_summary(phone: str) -> str:
+    """Gera um resumo curto da conversa com base no historico recente."""
+    _ensure_configured()
+    history = await get_chat_history(phone)
+    if not history:
+        return ""
+
+    # Monta texto das ultimas 10 mensagens para resumir
+    lines = []
+    for entry in history[-10:]:
+        role = "Atendente" if entry.get("role") == "model" else "Lead"
+        text = entry.get("parts", [{}])[0].get("text", "")
+        if text:
+            lines.append(f"{role}: {text[:200]}")
+
+    if not lines:
+        return ""
+
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    prompt = (
+        "Com base nesse trecho de conversa de uma academia de boxe, "
+        "escreva um resumo de 1 a 2 frases em portugues sobre quem e esse lead "
+        "e qual o interesse dele. Seja objetivo.\n\n"
+        + "\n".join(lines)
+    )
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip() if response.text else ""
+    except Exception:
+        return ""
+
+
 async def analyze_image(image_bytes: bytes) -> str:
     _ensure_configured()
     model = genai.GenerativeModel("gemini-2.5-flash")

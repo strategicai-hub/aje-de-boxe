@@ -10,8 +10,9 @@ from app.config import settings
 from app.images import MEDIA_DICT
 from app.services import redis_service as rds
 from app.services import uazapi
-from app.services.gemini import chat as gemini_chat, transcribe_audio, analyze_image
+from app.services.gemini import chat as gemini_chat, transcribe_audio, analyze_image, generate_summary
 from app.services.rabbitmq import consume
+from app.services import sheets_service
 
 logger = logging.getLogger(__name__)
 
@@ -117,14 +118,13 @@ async def _process_message(msg: dict) -> None:
         await rds.update_lead(phone, name=push_name)
 
     # E) Identificacao do tipo de mensagem
+    media_url = msg.get("media_url", "")
     if msg_type in TEXT_TYPES:
         buffer_text = msg_text
     elif msg_type == "AudioMessage":
         try:
-            raw_msg = msg.get("raw_message", {})
-            audio_url = raw_msg.get("audioMessage", {}).get("url", "")
-            if audio_url:
-                audio_bytes = await uazapi.download_media(audio_url)
+            if media_url:
+                audio_bytes = await uazapi.download_media(media_url)
                 transcription = await transcribe_audio(audio_bytes)
                 buffer_text = f"[Audio transcrito]: {transcription}"
             else:
@@ -134,11 +134,9 @@ async def _process_message(msg: dict) -> None:
             buffer_text = "[Audio recebido - erro na transcricao]"
     elif msg_type == "ImageMessage":
         try:
-            raw_msg = msg.get("raw_message", {})
-            image_url = raw_msg.get("imageMessage", {}).get("url", "")
-            caption = raw_msg.get("imageMessage", {}).get("caption", "")
-            if image_url:
-                image_bytes = await uazapi.download_media(image_url)
+            caption = msg.get("caption", "")
+            if media_url:
+                image_bytes = await uazapi.download_media(media_url)
                 description = await analyze_image(image_bytes)
                 buffer_text = f"[Imagem recebida]: {description}"
                 if caption:
@@ -212,11 +210,30 @@ async def _process_message(msg: dict) -> None:
         except Exception:
             logger.exception("Erro ao enviar %s para %s", part["type"], phone)
 
-    # J) Pos-envio: finalizacao
+    # J) Pos-envio: finalizacao + resumo em background
     if finalizado:
         await rds.set_block(phone)
         await rds.update_lead(phone, status_conversa="Finalizado")
         logger.info("Conversa finalizada para %s", phone)
+
+    asyncio.create_task(_update_summary_and_sheets(phone, lead.get("name", "")))
+
+
+async def _update_summary_and_sheets(phone: str, name: str) -> None:
+    """Gera resumo da conversa, salva no Redis e na planilha do Google."""
+    try:
+        resumo = await generate_summary(phone)
+        if resumo:
+            await rds.update_lead(phone, resumo=resumo)
+            logger.info("Resumo salvo no Redis para %s", phone)
+        lead = await rds.get_lead(phone)
+        sheets_service.upsert_lead(
+            phone=phone,
+            name=lead.get("name", name) if lead else name,
+            resumo=resumo,
+        )
+    except Exception:
+        logger.exception("Erro ao atualizar resumo/sheets para %s", phone)
 
 
 async def start_consumer() -> None:

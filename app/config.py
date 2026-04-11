@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     UAZAPI_TOKEN: str = ""
     UAZAPI_INSTANCE: str = "ajeboxe"
 
+    # Google Sheets
+    GOOGLE_CREDENTIALS_JSON: str = ""
+    GOOGLE_SHEET_ID: str = ""
+
     # App
     WEBHOOK_PATH: str = "/ajeboxe"
     DEBOUNCE_SECONDS: int = 30
