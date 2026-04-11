@@ -3,11 +3,8 @@ version: "3.8"
 services:
   aje-bot:
     image: ghcr.io/gustavocastilho-hub/aje-de-boxe:latest
-    ports:
-      - target: 8000
-        published: 8000
-        protocol: tcp
-        mode: ingress
+    networks:
+      - network_public
     environment:
       - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_PORT=${RABBITMQ_PORT}
@@ -30,3 +27,15 @@ services:
       restart_policy:
         condition: any
         delay: 5s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=network_public"
+        - "traefik.http.routers.aje-de-boxe.rule=Host(`webhook-whatsapp.strategicai.com.br`)"
+        - "traefik.http.routers.aje-de-boxe.entrypoints=websecure"
+        - "traefik.http.routers.aje-de-boxe.tls=true"
+        - "traefik.http.routers.aje-de-boxe.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.aje-de-boxe.loadbalancer.server.port=8000"
+
+networks:
+  network_public:
+    external: true
