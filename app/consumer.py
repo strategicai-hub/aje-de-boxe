@@ -69,12 +69,17 @@ def _parse_ai_response(text: str) -> tuple[list[dict], bool]:
 # ---- processamento principal ----
 
 async def _process_message(msg: dict) -> None:
-    phone = msg["phone"]
-    chat_id = msg["chat_id"]
+    phone = msg.get("phone", "")
+    chat_id = msg.get("chat_id", "")
     from_me = msg.get("from_me", False)
     msg_type = msg.get("msg_type", "")
     msg_text = msg.get("msg", "")
     push_name = msg.get("push_name", "")
+
+    # A) Descarta mensagens invalidas / nao suportadas
+    if not phone or msg_type in ("", "Unknown"):
+        logger.info("Ignorando mensagem invalida (phone=%r, msg_type=%r)", phone, msg_type)
+        return
 
     # B) Mensagem propria -> bloqueia agente por 1h
     if from_me:

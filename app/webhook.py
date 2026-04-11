@@ -57,6 +57,15 @@ async def webhook(request: Request):
     message_obj = data.get("message", {})
     msg_type, msg_text = _extract_message_type(message_obj)
 
+    # Descarta eventos sem remetente ou sem conteudo de mensagem reconhecido
+    if not phone or not message_obj or msg_type == "Unknown":
+        import json as _json
+        logger.warning(
+            "Webhook ignorado (phone=%r, msg_type=%r). Payload bruto: %s",
+            phone, msg_type, _json.dumps(payload)[:2000],
+        )
+        return {"status": "ignored", "reason": "no phone or unsupported message"}
+
     # Monta JSON padronizado para a fila
     queue_message = {
         "phone": phone,
