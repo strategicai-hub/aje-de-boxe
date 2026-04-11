@@ -59,12 +59,24 @@ def _history_key(phone: str) -> str:
 async def get_chat_history(phone: str) -> list[dict]:
     r = await get_redis()
     raw = await r.lrange(_history_key(phone), 0, -1)
-    return [json.loads(item) for item in raw]
+    history = []
+    for item in raw:
+        entry = json.loads(item)
+        if "type" in entry:
+            # Formato novo: {"type": "ai"/"human", "data": {"content": "..."}}
+            role = "model" if entry["type"] == "ai" else "user"
+            text = entry.get("data", {}).get("content", "")
+            history.append({"role": role, "parts": [{"text": text}]})
+        else:
+            # Formato legado: passa direto para o Gemini
+            history.append(entry)
+    return history
 
 
 async def append_chat_history(phone: str, role: str, text: str) -> None:
     r = await get_redis()
-    entry = json.dumps({"role": role, "parts": [{"text": text}]})
+    entry_type = "ai" if role == "model" else "human"
+    entry = json.dumps({"type": entry_type, "data": {"content": text}}, ensure_ascii=False)
     await r.rpush(_history_key(phone), entry)
     await r.ltrim(_history_key(phone), -50, -1)  # manter ultimas 50 msgs
 
