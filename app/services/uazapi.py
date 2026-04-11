@@ -33,34 +33,26 @@ async def send_text(number: str, text: str) -> dict:
     return resp.json()
 
 
-async def send_image(number: str, image_url: str, caption: str = "") -> dict:
-    url = f"{settings.UAZAPI_BASE_URL}/send/image"
-    payload = {"number": number, "image": image_url, "caption": caption}
+async def _send_media(number: str, media_type: str, file_url: str) -> dict:
+    url = f"{settings.UAZAPI_BASE_URL}/send/media"
+    payload = {"number": number, "type": media_type, "file": file_url}
     client = _get_client()
     resp = await client.post(url, json=payload, headers=_headers())
     resp.raise_for_status()
-    logger.info("Imagem enviada para %s", number)
+    logger.info("%s enviado para %s", media_type, number)
     return resp.json()
+
+
+async def send_image(number: str, image_url: str, caption: str = "") -> dict:
+    return await _send_media(number, "image", image_url)
 
 
 async def send_document(number: str, document_url: str, filename: str = "arquivo.pdf") -> dict:
-    url = f"{settings.UAZAPI_BASE_URL}/send/document"
-    payload = {"number": number, "document": document_url, "fileName": filename}
-    client = _get_client()
-    resp = await client.post(url, json=payload, headers=_headers())
-    resp.raise_for_status()
-    logger.info("Documento enviado para %s", number)
-    return resp.json()
+    return await _send_media(number, "document", document_url)
 
 
 async def send_video(number: str, video_url: str, caption: str = "") -> dict:
-    url = f"{settings.UAZAPI_BASE_URL}/send/video"
-    payload = {"number": number, "video": video_url, "caption": caption}
-    client = _get_client()
-    resp = await client.post(url, json=payload, headers=_headers())
-    resp.raise_for_status()
-    logger.info("Video enviado para %s", number)
-    return resp.json()
+    return await _send_media(number, "video", video_url)
 
 
 async def download_media(media_url: str) -> bytes:

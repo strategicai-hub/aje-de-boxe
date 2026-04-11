@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from pydantic_settings import BaseSettings
 
 
@@ -6,7 +8,7 @@ class Settings(BaseSettings):
     RABBITMQ_HOST: str = "91.98.64.92"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
-    RABBITMQ_PASSWORD: str = "guest"
+    RABBITMQ_PASS: str = "guest"
     RABBITMQ_VHOST: str = "default"
     RABBITMQ_QUEUE: str = "ajeboxe"
 
@@ -30,9 +32,12 @@ class Settings(BaseSettings):
 
     @property
     def rabbitmq_url(self) -> str:
+        user = quote(self.RABBITMQ_USER, safe="")
+        password = quote(self.RABBITMQ_PASS, safe="")
+        vhost = quote(self.RABBITMQ_VHOST, safe="")
         return (
-            f"amqp://{self.RABBITMQ_USER}:{self.RABBITMQ_PASSWORD}"
-            f"@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}/{self.RABBITMQ_VHOST}"
+            f"amqp://{user}:{password}"
+            f"@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}/{vhost}"
         )
 
     @property
