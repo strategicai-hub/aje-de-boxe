@@ -116,3 +116,4 @@ Se o step do webhook for pulado com a mensagem `PORTAINER_WEBHOOK_URL not set, s
 | Webhook retorna 404 | URL do webhook copiada errada, ou stack recriada (URL muda) | Abrir stack no Portainer, copiar URL nova, atualizar o secret |
 | Stack redeploy, mas container roda código antigo | Tag `:latest` não foi atualizada, ou o Swarm está cacheando | Confirmar no GHCR que o `:latest` aponta para o SHA novo; forçar `--force` update se necessário |
 | Step do webhook é pulado | Secret `PORTAINER_WEBHOOK_URL` ausente | Criar o secret no repo |
+| `curl: (60) SSL certificate problem` no step do webhook | Portainer acessado por IP ou com cert self-signed | O workflow já usa `curl -k`; se preferir verificação estrita, coloque o Portainer atrás de um domínio com cert válido |

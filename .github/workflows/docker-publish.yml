@@ -45,4 +45,4 @@ jobs:
             echo "PORTAINER_WEBHOOK_URL not set, skipping redeploy."
             exit 0
           fi
-          curl -fsSL -X POST "$PORTAINER_WEBHOOK_URL"
+          curl -fsSLk -X POST "$PORTAINER_WEBHOOK_URL"
