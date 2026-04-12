@@ -76,6 +76,7 @@ async def _process_message(msg: dict) -> None:
     msg_type = msg.get("msg_type", "")
     msg_text = msg.get("msg", "")
     push_name = msg.get("push_name", "")
+    _log: list[str] = []
 
     # A) Descarta mensagens invalidas / nao suportadas
     if not phone or msg_type in ("", "Unknown"):
@@ -170,6 +171,7 @@ async def _process_message(msg: dict) -> None:
 
     unified_msg = "\n".join(messages)
     logger.info("Mensagem unificada de %s: %s", phone, unified_msg[:100])
+    _log.append(f"MSG: {unified_msg[:200]}")
 
     # G) Processamento com IA (com retry)
     ai_response = ""
@@ -186,6 +188,8 @@ async def _process_message(msg: dict) -> None:
 
     if not ai_response:
         logger.error("Gemini retornou vazio apos 6 tentativas para %s", phone)
+        _log.append("ERRO: Gemini retornou vazio apos 6 tentativas")
+        asyncio.create_task(rds.append_execution_log(phone, _log))
         return
 
     # H) Verifica bloqueio pos-IA
@@ -195,7 +199,9 @@ async def _process_message(msg: dict) -> None:
 
     # I) Parsing e envio
     parts, finalizado = _parse_ai_response(ai_response)
+    _log.append(f"IA: {ai_response[:300]}")
 
+    sent_count = 0
     for i, part in enumerate(parts):
         if i > 0:
             await asyncio.sleep(4)  # delay entre mensagens consecutivas
@@ -209,8 +215,12 @@ async def _process_message(msg: dict) -> None:
                 await uazapi.send_document(phone, part["content"])
             elif part["type"] == "video":
                 await uazapi.send_video(phone, part["content"])
+            sent_count += 1
         except Exception:
             logger.exception("Erro ao enviar %s para %s", part["type"], phone)
+            _log.append(f"ERRO ao enviar parte {i + 1} ({part['type']})")
+
+    _log.append(f"ENVIADO: {sent_count}/{len(parts)} partes")
 
     # J) Alerta de atendimento humano
     asyncio.create_task(_maybe_send_alert(phone, lead, unified_msg, ai_response))
@@ -220,8 +230,10 @@ async def _process_message(msg: dict) -> None:
         await rds.set_block(phone)
         await rds.update_lead(phone, status_conversa="Finalizado")
         logger.info("Conversa finalizada para %s", phone)
+        _log.append("STATUS: Conversa finalizada")
 
     asyncio.create_task(_update_summary_and_sheets(phone, lead.get("name", "")))
+    asyncio.create_task(rds.append_execution_log(phone, _log))
 
 
 async def _maybe_send_alert(phone: str, lead: dict, user_msg: str, ai_response: str) -> None:
