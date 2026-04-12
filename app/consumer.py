@@ -196,7 +196,9 @@ async def _process_message(msg: dict) -> None:
     # I) Parsing e envio
     parts, finalizado = _parse_ai_response(ai_response)
 
-    for part in parts:
+    for i, part in enumerate(parts):
+        if i > 0:
+            await asyncio.sleep(4)  # delay entre mensagens consecutivas
         try:
             if part["type"] == "text":
                 await uazapi.send_text(phone, part["content"])
@@ -210,13 +212,39 @@ async def _process_message(msg: dict) -> None:
         except Exception:
             logger.exception("Erro ao enviar %s para %s", part["type"], phone)
 
-    # J) Pos-envio: finalizacao + resumo em background
+    # J) Alerta de atendimento humano
+    asyncio.create_task(_maybe_send_alert(phone, lead, unified_msg, ai_response))
+
+    # K) Pos-envio: finalizacao + resumo em background
     if finalizado:
         await rds.set_block(phone)
         await rds.update_lead(phone, status_conversa="Finalizado")
         logger.info("Conversa finalizada para %s", phone)
 
     asyncio.create_task(_update_summary_and_sheets(phone, lead.get("name", "")))
+
+
+async def _maybe_send_alert(phone: str, lead: dict, user_msg: str, ai_response: str) -> None:
+    """Envia alerta de atendimento humano quando a IA indica transferencia para a equipe."""
+    if "nossa equipe" not in ai_response.lower():
+        return
+    if await rds.is_alert_sent(phone):
+        logger.info("Alerta ja enviado recentemente para %s - ignorando", phone)
+        return
+
+    name = lead.get("name", "") or phone
+    motivo = user_msg.strip()[:120]
+    alert_text = (
+        f"\U0001f6a8 ATENDIMENTO HUMANO \U0001f6a8\n"
+        f"Contato: {name} ({phone})\n"
+        f"Motivo: {motivo}"
+    )
+    try:
+        await uazapi.send_text(settings.ALERT_PHONE, alert_text)
+        await rds.set_alert_sent(phone)
+        logger.info("Alerta enviado para %s sobre lead %s", settings.ALERT_PHONE, phone)
+    except Exception:
+        logger.exception("Erro ao enviar alerta de atendimento humano")
 
 
 async def _update_summary_and_sheets(phone: str, name: str) -> None:

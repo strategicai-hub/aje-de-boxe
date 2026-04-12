@@ -86,6 +86,18 @@ async def clear_chat_history(phone: str) -> None:
     await r.delete(_history_key(phone))
 
 
+# --------------- alerta de atendimento humano ---------------
+
+async def set_alert_sent(phone: str, ttl: int = 3600) -> None:
+    r = await get_redis()
+    await r.set(f"{_base_key(phone)}:alert", "1", ex=ttl)
+
+
+async def is_alert_sent(phone: str) -> bool:
+    r = await get_redis()
+    return await r.exists(f"{_base_key(phone)}:alert") == 1
+
+
 # --------------- leads ---------------
 
 def _lead_key(phone: str) -> str:

@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     DEBOUNCE_SECONDS: int = 30
     BLOCK_TTL_SECONDS: int = 3600
 
+    # Alerta de atendimento humano
+    # Para trocar o número: edite ALERT_PHONE no arquivo .env
+    # Formato: somente dígitos, com DDI (ex: 5511999990000)
+    ALERT_PHONE: str = "5511989887525"
+
     @property
     def rabbitmq_url(self) -> str:
         user = quote(self.RABBITMQ_USER, safe="")
