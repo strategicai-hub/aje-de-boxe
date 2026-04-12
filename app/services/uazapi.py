@@ -19,7 +19,7 @@ def _get_client() -> httpx.AsyncClient:
 
 def _headers() -> dict:
     return {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json; charset=utf-8",
         "token": settings.UAZAPI_TOKEN,
     }
 
