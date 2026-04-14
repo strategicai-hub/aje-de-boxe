@@ -15,7 +15,7 @@ from app.config import settings
 from app.images import MEDIA_DICT
 from app.services import redis_service as rds
 from app.services import uazapi
-from app.services.gemini import chat as gemini_chat, transcribe_audio, analyze_image, generate_summary
+from app.services.gemini import chat as gemini_chat, transcribe_audio, analyze_image, generate_summary, generate_alert_reason
 from app.services.rabbitmq import consume
 from app.services import sheets_service
 
@@ -304,11 +304,19 @@ async def _maybe_send_alert(phone: str, lead: dict, user_msg: str, ai_response: 
         return
 
     name = lead.get("name", "") or phone
-    resp_lower = ai_response.lower()
-    if "aula experimental" in resp_lower or "agendamento" in resp_lower or "excelente noticia" in resp_lower:
-        motivo = "Lead quer agendar aula experimental gratuita 🥊"
-    else:
-        motivo = user_msg.strip()[:120]
+
+    motivo = ""
+    try:
+        motivo = await generate_alert_reason(phone)
+    except Exception as e:
+        logger.warning("Falha ao gerar motivo do alerta via Gemini: %s", e)
+
+    if not motivo:
+        resp_lower = ai_response.lower()
+        if "aula experimental" in resp_lower or "agendamento" in resp_lower or "excelente noticia" in resp_lower:
+            motivo = "Lead quer agendar aula experimental gratuita 🥊"
+        else:
+            motivo = user_msg.strip()[:120] or "Transferência para equipe humana"
     alert_text = (
         f"\U0001f6a8 ATENDIMENTO HUMANO \U0001f6a8\n"
         f"Contato: {name} ({phone})\n"
