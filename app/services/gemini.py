@@ -56,7 +56,7 @@ async def transcribe_audio(audio_bytes: bytes) -> str:
         "data": audio_bytes,
     }
     response = model.generate_content(
-        ["Transcreva essa gravacao de audio fielmente. Retorne APENAS o texto transcrito, sem comentarios.", audio_part]
+        ["Transcreva essa gravação de áudio fielmente. Retorne APENAS o texto transcrito, sem comentários.", audio_part]
     )
     return response.text.strip() if response.text else ""
 
@@ -82,7 +82,7 @@ async def generate_summary(phone: str) -> str:
     model = genai.GenerativeModel("gemini-2.5-flash")
     prompt = (
         "Com base nesse trecho de conversa de uma academia de boxe, "
-        "escreva um resumo de 1 a 2 frases em portugues sobre quem e esse lead "
+        "escreva um resumo de 1 a 2 frases em português sobre quem é esse lead "
         "e qual o interesse dele. Seja objetivo.\n\n"
         + "\n".join(lines)
     )
@@ -102,6 +102,6 @@ async def analyze_image(image_bytes: bytes) -> str:
         "data": image_bytes,
     }
     response = model.generate_content(
-        ["Descreva esta imagem em ate 50 palavras, em portugues.", image_part]
+        ["Descreva esta imagem em até 50 palavras, em português.", image_part]
     )
     return response.text.strip() if response.text else ""
