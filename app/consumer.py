@@ -175,20 +175,22 @@ async def _process_message(msg: dict) -> None:
     if msg_type in TEXT_TYPES:
         buffer_text = msg_text
     elif msg_type == "AudioMessage":
+        log(f"[TOOL AUDIO] Executando transcribe_audio(phone={phone})")
         try:
             if media_url:
                 audio_bytes = await uazapi.download_media(media_url)
                 transcription = await transcribe_audio(audio_bytes)
                 buffer_text = f"[Audio transcrito]: {transcription}"
-                log(_ok(f"[{phone}] Audio transcrito com sucesso"))
+                log(_ok(f"[TOOL AUDIO] Resultado: SUCESSO - audio transcrito para {phone}"))
             else:
                 buffer_text = "[Audio recebido - nao foi possivel transcrever]"
-                log(_warn(f"[{phone}] Audio recebido sem media_url"))
+                log(_warn(f"[TOOL AUDIO] Resultado: FALHA - sem media_url para {phone}"))
         except Exception as e:
-            log(_err(f"[{phone}] Falha ao transcrever audio: {e}"))
+            log(_err(f"[TOOL AUDIO] Resultado: EXCECAO - {e}"))
             logger.exception("Erro ao transcrever audio")
             buffer_text = "[Audio recebido - erro na transcricao]"
     elif msg_type == "ImageMessage":
+        log(f"[TOOL IMAGEM] Executando analyze_image(phone={phone})")
         try:
             caption = msg.get("caption", "")
             if media_url:
@@ -197,12 +199,12 @@ async def _process_message(msg: dict) -> None:
                 buffer_text = f"[Imagem recebida]: {description}"
                 if caption:
                     buffer_text += f"\nLegenda: {caption}"
-                log(_ok(f"[{phone}] Imagem analisada com sucesso"))
+                log(_ok(f"[TOOL IMAGEM] Resultado: SUCESSO - imagem analisada para {phone}"))
             else:
                 buffer_text = "[Imagem recebida - nao foi possivel analisar]"
-                log(_warn(f"[{phone}] Imagem recebida sem media_url"))
+                log(_warn(f"[TOOL IMAGEM] Resultado: FALHA - sem media_url para {phone}"))
         except Exception as e:
-            log(_err(f"[{phone}] Falha ao analisar imagem: {e}"))
+            log(_err(f"[TOOL IMAGEM] Resultado: EXCECAO - {e}"))
             logger.exception("Erro ao analisar imagem")
             buffer_text = "[Imagem recebida - erro na analise]"
     else:
@@ -226,9 +228,9 @@ async def _process_message(msg: dict) -> None:
 
     unified_msg = "\n".join(messages)
     log(_msg(f"[{phone} - {push_name}] {unified_msg[:300]}"))
-    log(f"Chamando o Agente (LLM) com workflow AJE para responder a: {unified_msg[:200]}")
 
     # G) Processamento com IA (com retry)
+    log(f"[TOOL GEMINI] Executando chat(phone={phone}, msg_len={len(unified_msg)})")
     ai_response = ""
     last_error = ""
     tokens = (0, 0, 0)
@@ -237,17 +239,17 @@ async def _process_message(msg: dict) -> None:
             ai_response, tokens = await gemini_chat(phone, unified_msg, lead.get("name", ""))
         except Exception as e:
             last_error = str(e)
-            log(_err(f"[LLM] Tentativa {attempt + 1}/6: {e}"))
+            log(_err(f"[TOOL GEMINI] Tentativa {attempt + 1}/6: FALHA - {e}"))
             logger.exception("Erro no Gemini (tentativa %d)", attempt + 1)
 
         if ai_response:
             break
         if not last_error:
-            log(_warn(f"[LLM] Tentativa {attempt + 1}/6: resposta vazia"))
+            log(_warn(f"[TOOL GEMINI] Tentativa {attempt + 1}/6: resposta vazia"))
         await asyncio.sleep(2)
 
     if not ai_response:
-        log(_err(f"[{phone}] Gemini retornou vazio apos 6 tentativas. Ultimo erro: {last_error}"))
+        log(_err(f"[TOOL GEMINI] Resultado: FALHA - vazio apos 6 tentativas. Ultimo erro: {last_error}"))
         _save_session_log(phone)
         return
 
@@ -259,6 +261,7 @@ async def _process_message(msg: dict) -> None:
 
     # I) Parsing e envio
     parts, finalizado = _parse_ai_response(ai_response)
+    log(_ok(f"[TOOL GEMINI] Resultado: SUCESSO - {len(parts)} parte(s) gerada(s), finalizado={finalizado}"))
     log(_ai(f"[{phone}] {ai_response[:400]}"))
     if tokens[2]:
         log(f"[TOKENS] Entrada: {tokens[0]} | Sa\u00edda: {tokens[1]} | Total: {tokens[2]}")
@@ -276,9 +279,8 @@ async def _process_message(msg: dict) -> None:
             elif part["type"] == "video":
                 await uazapi.send_video(phone, part["content"])
             sent_count += 1
-            log(_ok(f"[{i+1}/{len(parts)}] Parte enviada ({part['type']})"))
         except Exception as e:
-            log(_err(f"[{i+1}/{len(parts)}] Falha ao enviar {part['type']}: {e}"))
+            log(_err(f"[TOOL WHATSAPP] Resultado: FALHA ao enviar {part['type']} ({i+1}/{len(parts)}) - {e}"))
             logger.exception("Erro ao enviar %s para %s", part["type"], phone)
 
     # J) Alerta de atendimento humano
@@ -298,9 +300,13 @@ async def _process_message(msg: dict) -> None:
 async def _maybe_send_alert(phone: str, lead: dict, user_msg: str, ai_response: str) -> None:
     """Envia alerta de atendimento humano quando a IA indica transferencia para a equipe."""
     if "nossa equipe" not in ai_response.lower():
+        log(f"[TOOL ALERTA_EQUIPE] Nao acionado - IA nao indicou transferencia para equipe")
+        return
+    if not settings.ALERT_PHONE:
+        log(_warn(f"[TOOL ALERTA_EQUIPE] Nao acionado - ALERT_PHONE nao configurado"))
         return
     if await rds.is_alert_sent(phone):
-        logger.info("Alerta ja enviado recentemente para %s - ignorando", phone)
+        log(f"[TOOL ALERTA_EQUIPE] Ignorado - alerta ja enviado recentemente para {phone}")
         return
 
     name = lead.get("name", "") or phone
@@ -317,6 +323,8 @@ async def _maybe_send_alert(phone: str, lead: dict, user_msg: str, ai_response: 
             motivo = "Lead quer agendar aula experimental gratuita 🥊"
         else:
             motivo = user_msg.strip()[:120] or "Transferência para equipe humana"
+
+    log(f"[TOOL ALERTA_EQUIPE] Executando(phone={phone}, motivo={motivo[:80]})")
     alert_text = (
         f"\U0001f6a8 ATENDIMENTO HUMANO \U0001f6a8\n"
         f"Contato: {name} ({phone})\n"
@@ -325,30 +333,42 @@ async def _maybe_send_alert(phone: str, lead: dict, user_msg: str, ai_response: 
     try:
         await uazapi.send_text(settings.ALERT_PHONE, alert_text)
         await rds.set_alert_sent(phone)
-        log(_ok(f"[{phone}] Alerta de atendimento humano enviado"))
+        log(_ok(f"[TOOL ALERTA_EQUIPE] Resultado: SUCESSO - equipe notificada sobre {phone}"))
         _save_session_log(phone)
     except Exception as e:
-        log(_err(f"[{phone}] Falha ao enviar alerta de atendimento humano: {e}"))
+        log(_err(f"[TOOL ALERTA_EQUIPE] Resultado: FALHA - {e}"))
         logger.exception("Erro ao enviar alerta de atendimento humano: %s", e)
         _save_session_log(phone)
 
 
 async def _update_summary_and_sheets(phone: str, name: str) -> None:
     """Gera resumo da conversa, salva no Redis e na planilha do Google."""
+    log(f"[TOOL RESUMO] Executando generate_summary(phone={phone})")
+    resumo = ""
     try:
         resumo = await generate_summary(phone)
         if resumo:
             await rds.update_lead(phone, resumo=resumo)
-            logger.info("Resumo salvo no Redis para %s", phone)
+            log(_ok(f"[TOOL RESUMO] Resultado: SUCESSO - {len(resumo)} caracteres salvos no Redis"))
+        else:
+            log(_warn(f"[TOOL RESUMO] Resultado: vazio - historico insuficiente para gerar resumo"))
+    except Exception as e:
+        log(_err(f"[TOOL RESUMO] Resultado: EXCECAO - {e}"))
+        logger.exception("Erro ao gerar resumo para %s: %s", phone, e)
+
+    log(f"[TOOL SHEETS] Executando upsert_lead(phone={phone})")
+    try:
         lead = await rds.get_lead(phone)
         sheets_service.upsert_lead(
             phone=phone,
             name=lead.get("name", name) if lead else name,
             resumo=resumo,
         )
+        log(_ok(f"[TOOL SHEETS] Resultado: SUCESSO - lead atualizado na planilha"))
     except Exception as e:
-        log(_err(f"[{phone}] Erro ao atualizar resumo/sheets: {e}"))
-        logger.exception("Erro ao atualizar resumo/sheets para %s: %s", phone, e)
+        log(_err(f"[TOOL SHEETS] Resultado: EXCECAO - {e}"))
+        logger.exception("Erro ao atualizar sheets para %s: %s", phone, e)
+    finally:
         _save_session_log(phone)
 
 
