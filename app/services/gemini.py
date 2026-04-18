@@ -1,8 +1,8 @@
 import logging
-import io
 
 import google.generativeai as genai
 
+from app.client_data import load_client_data
 from app.config import settings
 from app.prompt import SYSTEM_PROMPT
 from app.services.redis_service import get_chat_history, append_chat_history
@@ -56,7 +56,7 @@ async def transcribe_audio(audio_bytes: bytes) -> str:
         "data": audio_bytes,
     }
     response = model.generate_content(
-        ["Transcreva essa gravação de áudio fielmente. Retorne APENAS o texto transcrito, sem comentários.", audio_part]
+        ["Transcreva essa gravacao de audio fielmente. Retorne APENAS o texto transcrito, sem comentarios.", audio_part]
     )
     return response.text.strip() if response.text else ""
 
@@ -80,51 +80,17 @@ async def generate_summary(phone: str) -> str:
         return ""
 
     model = genai.GenerativeModel("gemini-2.5-flash")
+    client = load_client_data()
+    business_type = (client.get("business", {}) or {}).get("type", "negocio")
     prompt = (
-        "Com base nesse trecho de conversa de uma academia de boxe, "
-        "escreva um resumo de 1 a 2 frases em português sobre quem é esse lead "
+        f"Com base nesse trecho de conversa de {business_type}, "
+        "escreva um resumo de 1 a 2 frases em portugues sobre quem e esse lead "
         "e qual o interesse dele. Seja objetivo.\n\n"
         + "\n".join(lines)
     )
     try:
         response = model.generate_content(prompt)
         return response.text.strip() if response.text else ""
-    except Exception:
-        return ""
-
-
-async def generate_alert_reason(phone: str) -> str:
-    """Gera um motivo curto (uma frase) que explica por que a IA está transferindo para a equipe."""
-    _ensure_configured()
-    history = await get_chat_history(phone)
-    if not history:
-        return ""
-
-    lines = []
-    for entry in history[-12:]:
-        role = "Atendente" if entry.get("role") == "model" else "Lead"
-        text = entry.get("parts", [{}])[0].get("text", "")
-        if text:
-            lines.append(f"{role}: {text[:300]}")
-
-    if not lines:
-        return ""
-
-    model = genai.GenerativeModel("gemini-2.5-flash")
-    prompt = (
-        "Abaixo está o trecho final de uma conversa de atendimento de uma academia de boxe. "
-        "A IA decidiu transferir para a equipe humana. "
-        "Escreva em UMA única frase curta (máx 80 caracteres, em português) o motivo que levou a IA a chamar a equipe, "
-        "do ponto de vista do interesse ou situação do lead. "
-        "Exemplos: 'Lead quer agendar aula experimental', 'Lead quer fechar plano trimestral', "
-        "'Dúvida sobre horário específico fora dos dados', 'Aluno pediu segunda via de boleto'. "
-        "Retorne APENAS a frase, sem prefixos, sem aspas.\n\n"
-        + "\n".join(lines)
-    )
-    try:
-        response = model.generate_content(prompt)
-        text = (response.text or "").strip().strip('"').strip("'")
-        return text[:120]
     except Exception:
         return ""
 
@@ -138,6 +104,6 @@ async def analyze_image(image_bytes: bytes) -> str:
         "data": image_bytes,
     }
     response = model.generate_content(
-        ["Descreva esta imagem em até 50 palavras, em português.", image_part]
+        ["Descreva esta imagem em ate 50 palavras, em portugues.", image_part]
     )
     return response.text.strip() if response.text else ""

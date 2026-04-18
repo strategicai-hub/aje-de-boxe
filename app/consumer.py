@@ -7,7 +7,7 @@ import json
 import logging
 import re
 import time
-import traceback
+from contextvars import ContextVar
 
 import redis as redis_sync
 
@@ -15,8 +15,9 @@ from app.config import settings
 from app.images import MEDIA_DICT
 from app.services import redis_service as rds
 from app.services import uazapi
-from app.services.gemini import chat as gemini_chat, transcribe_audio, analyze_image, generate_summary, generate_alert_reason
+from app.services.gemini import chat as gemini_chat, transcribe_audio, analyze_image, generate_summary
 from app.services.rabbitmq import consume
+from app.services.redis_keys import session_log_key
 from app.services import sheets_service
 
 logger = logging.getLogger(__name__)
@@ -24,18 +25,22 @@ logger = logging.getLogger(__name__)
 # Tipos de mensagem de texto
 TEXT_TYPES = {"ExtendedTextMessage", "Conversation", "ContactMessage", "ReactionMessage"}
 
-# Numeros que nao passam pelo debounce de mensagens
-DEBOUNCE_BYPASS = {"5511989887525"}
-
 # --- LOG DE SESSAO ---
-_LOG_KEY = "aje:logs"
+# Buffer por task: cada mensagem processada e suas tasks derivadas compartilham
+# uma mesma lista via ContextVar. Tasks criadas com asyncio.create_task herdam
+# o contexto automaticamente.
+_LOG_KEY = session_log_key()
+_session_log_var: ContextVar[list[str]] = ContextVar("session_log")
+
 try:
-    _log_redis = redis_sync.Redis.from_url(settings.redis_url, decode_responses=True)
-    _log_redis.ping()
+    _log_redis = redis_sync.Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=5,
+        socket_timeout=5,
+    )
 except Exception:
     _log_redis = None
-
-_session_log: list[str] = []
 
 
 # ---- formatacao de linhas de log ----
@@ -62,19 +67,38 @@ def _strip_html(text: str) -> str:
 
 def log(line: str) -> None:
     logger.info(_strip_html(line))
-    _session_log.append(line)
+    buf = _session_log_var.get(None)
+    if buf is not None:
+        buf.append(line)
 
 
 def _save_session_log(phone: str) -> None:
-    global _session_log
-    if _log_redis and _session_log:
+    global _log_redis
+    buf = _session_log_var.get(None)
+    if not buf:
+        return
+    if _log_redis is None:
+        try:
+            _log_redis = redis_sync.Redis.from_url(
+                settings.redis_url,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+            )
+        except Exception as e:
+            logger.error("Nao foi possivel conectar ao Redis para logs: %s", e)
+    if _log_redis:
         entry = json.dumps(
-            {"ts": time.time(), "phone": phone, "lines": list(_session_log)},
+            {"ts": time.time(), "phone": phone, "lines": list(buf)},
             ensure_ascii=False,
         )
-        _log_redis.lpush(_LOG_KEY, entry)
-        _log_redis.ltrim(_LOG_KEY, 0, 499)
-    _session_log = []
+        try:
+            _log_redis.lpush(_LOG_KEY, entry)
+            _log_redis.ltrim(_LOG_KEY, 0, 499)
+        except Exception as e:
+            logger.error("Erro ao salvar log no Redis: %s", e)
+            _log_redis = None  # forca reconexao na proxima chamada
+    buf.clear()
 
 
 # ---- helpers ----
@@ -83,19 +107,26 @@ def _is_group(chat_id: str) -> bool:
     return "@g.us" in chat_id
 
 
-def _parse_ai_response(text: str) -> tuple[list[dict], bool]:
+def _parse_ai_response(text: str) -> tuple[list[dict], bool, bool]:
     """
     Parseia a resposta da IA:
     - Extrai flag [FINALIZADO=0/1]
+    - Extrai flag [TRANSFERIR=0/1] (indica transferencia para equipe humana)
     - Quebra em partes (por \\n\\n ou |||)
     - Detecta tags de midia e substitui pelos links do dicionario
-    Retorna (partes, finalizado).
+    Retorna (partes, finalizado, transferir).
     """
     finalizado = False
     match = re.search(r"\[FINALIZADO=(\d)\]", text)
     if match:
         finalizado = match.group(1) == "1"
         text = re.sub(r"\[FINALIZADO=\d\]", "", text).strip()
+
+    transferir = False
+    match_t = re.search(r"\[TRANSFERIR=(\d)\]", text)
+    if match_t:
+        transferir = match_t.group(1) == "1"
+        text = re.sub(r"\[TRANSFERIR=\d\]", "", text).strip()
 
     if "|||" in text:
         raw_parts = [p.strip() for p in text.split("|||") if p.strip()]
@@ -115,12 +146,23 @@ def _parse_ai_response(text: str) -> tuple[list[dict], bool]:
     if not parts:
         parts = [{"type": "text", "content": text}]
 
-    return parts, finalizado
+    return parts, finalizado, transferir
 
 
 # ---- processamento principal ----
 
+def _begin_session_log() -> None:
+    """Cria um buffer de log isolado para a coroutine atual.
+
+    Tasks filhas herdam este buffer por padrao (asyncio.create_task copia o
+    contexto). Se uma task precisa de um buffer independente, chame isso
+    dentro dela antes de logar.
+    """
+    _session_log_var.set([])
+
+
 async def _process_message(msg: dict) -> None:
+    _begin_session_log()
     phone = msg.get("phone", "")
     chat_id = msg.get("chat_id", "")
     from_me = msg.get("from_me", False)
@@ -131,6 +173,12 @@ async def _process_message(msg: dict) -> None:
     # A) Descarta mensagens invalidas / nao suportadas
     if not phone or msg_type in ("", "Unknown"):
         logger.info("Ignorando mensagem invalida (phone=%r, msg_type=%r)", phone, msg_type)
+        return
+
+    # A.1) Whitelist (se configurada, apenas numeros listados recebem resposta)
+    allowed = settings.allowed_phones_set
+    if allowed and phone not in allowed:
+        logger.info("Phone %s fora da whitelist ALLOWED_PHONES - ignorando", phone)
         return
 
     # B) Mensagem propria -> bloqueia agente por 1h
@@ -220,7 +268,7 @@ async def _process_message(msg: dict) -> None:
         logger.info("Buffer ja ativo para %s (count=%d) - saindo", phone, count)
         return
 
-    if phone not in DEBOUNCE_BYPASS:
+    if phone not in settings.debounce_bypass_set:
         await asyncio.sleep(settings.DEBOUNCE_SECONDS)
 
     messages = await rds.get_buffer(phone)
@@ -260,13 +308,12 @@ async def _process_message(msg: dict) -> None:
         return
 
     # I) Parsing e envio
-    parts, finalizado = _parse_ai_response(ai_response)
-    log(_ok(f"[TOOL GEMINI] Resultado: SUCESSO - {len(parts)} parte(s) gerada(s), finalizado={finalizado}"))
+    parts, finalizado, transferir = _parse_ai_response(ai_response)
+    log(_ok(f"[TOOL GEMINI] Resultado: SUCESSO - {len(parts)} parte(s) gerada(s), finalizado={finalizado}, transferir={transferir}"))
     log(_ai(f"[{phone}] {ai_response[:400]}"))
     if tokens[2]:
         log(f"[TOKENS] Entrada: {tokens[0]} | Sa\u00edda: {tokens[1]} | Total: {tokens[2]}")
 
-    sent_count = 0
     for i, part in enumerate(parts):
         try:
             if part["type"] == "text":
@@ -278,69 +325,59 @@ async def _process_message(msg: dict) -> None:
                 await uazapi.send_document(phone, part["content"])
             elif part["type"] == "video":
                 await uazapi.send_video(phone, part["content"])
-            sent_count += 1
         except Exception as e:
             log(_err(f"[TOOL WHATSAPP] Resultado: FALHA ao enviar {part['type']} ({i+1}/{len(parts)}) - {e}"))
             logger.exception("Erro ao enviar %s para %s", part["type"], phone)
 
     # J) Alerta de atendimento humano
-    await _maybe_send_alert(phone, lead, unified_msg, ai_response)
+    if transferir:
+        asyncio.create_task(_maybe_send_alert(phone, lead, unified_msg))
 
-    # K) Pos-envio: finalizacao + resumo
+    # K) Pos-envio: finalizacao + resumo em background
     if finalizado:
         await rds.set_block(phone)
         await rds.update_lead(phone, status_conversa="Finalizado")
         log(_ok(f"[{phone}] Conversa marcada como finalizada"))
 
-    await _update_summary_and_sheets(phone, lead.get("name", ""))
+    asyncio.create_task(_update_summary_and_sheets(phone, lead.get("name", "")))
 
     _save_session_log(phone)
 
 
-async def _maybe_send_alert(phone: str, lead: dict, user_msg: str, ai_response: str) -> None:
-    """Envia alerta de atendimento humano quando a IA indica transferencia para a equipe."""
-    if "nossa equipe" not in ai_response.lower():
-        log(f"[TOOL ALERTA_EQUIPE] Nao acionado - IA nao indicou transferencia para equipe")
-        return
+async def _maybe_send_alert(phone: str, lead: dict, user_msg: str) -> None:
+    """Envia alerta de atendimento humano. Chamada apenas quando a IA emite [TRANSFERIR=1]."""
+    _begin_session_log()
     if not settings.ALERT_PHONE:
         log(_warn(f"[TOOL ALERTA_EQUIPE] Nao acionado - ALERT_PHONE nao configurado"))
+        _save_session_log(phone)
         return
     if await rds.is_alert_sent(phone):
         log(f"[TOOL ALERTA_EQUIPE] Ignorado - alerta ja enviado recentemente para {phone}")
+        _save_session_log(phone)
         return
 
-    name = lead.get("name", "") or phone
-
-    motivo = ""
-    try:
-        motivo = await generate_alert_reason(phone)
-    except Exception as e:
-        logger.warning("Falha ao gerar motivo do alerta via Gemini: %s", e)
-
-    if not motivo:
-        resp_lower = ai_response.lower()
-        if "aula experimental" in resp_lower or "agendamento" in resp_lower or "excelente noticia" in resp_lower:
-            motivo = "Lead quer agendar aula experimental gratuita 🥊"
-        else:
-            motivo = user_msg.strip()[:120] or "Transferência para equipe humana"
-
+    contact = lead.get("name", "") or phone
+    motivo = user_msg.strip()[:120] or "Transferencia solicitada pela IA"
     log(f"[TOOL ALERTA_EQUIPE] Executando(phone={phone}, motivo={motivo[:80]})")
     alert_text = (
         f"\U0001f6a8 ATENDIMENTO HUMANO \U0001f6a8\n"
-        f"Contato: {name} ({phone})\n"
+        f"Contato: {contact} ({phone})\n"
         f"Motivo: {motivo}"
     )
     try:
         await uazapi.send_text(settings.ALERT_PHONE, alert_text)
         await rds.set_alert_sent(phone)
         log(_ok(f"[TOOL ALERTA_EQUIPE] Resultado: SUCESSO - equipe notificada sobre {phone}"))
+        _save_session_log(phone)
     except Exception as e:
         log(_err(f"[TOOL ALERTA_EQUIPE] Resultado: FALHA - {e}"))
         logger.exception("Erro ao enviar alerta de atendimento humano: %s", e)
+        _save_session_log(phone)
 
 
 async def _update_summary_and_sheets(phone: str, name: str) -> None:
     """Gera resumo da conversa, salva no Redis e na planilha do Google."""
+    _begin_session_log()
     log(f"[TOOL RESUMO] Executando generate_summary(phone={phone})")
     resumo = ""
     try:
@@ -366,6 +403,8 @@ async def _update_summary_and_sheets(phone: str, name: str) -> None:
     except Exception as e:
         log(_err(f"[TOOL SHEETS] Resultado: EXCECAO - {e}"))
         logger.exception("Erro ao atualizar sheets para %s: %s", phone, e)
+    finally:
+        _save_session_log(phone)
 
 
 async def start_consumer() -> None:

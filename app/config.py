@@ -1,15 +1,25 @@
 from urllib.parse import quote
 
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 
 
 class Settings(BaseSettings):
+    # Identificador unico do projeto (deriva prefix das chaves Redis, etc.)
+    # Hardcoded em "aje" para preservar as chaves Redis de producao (--aje).
+    PROJECT_SLUG: str = "aje"
+
+    # Dados do negocio
+    BUSINESS_NAME: str = "AJE DE BOXE"
+    ASSISTANT_NAME: str = "Vic"
+
     # RabbitMQ
     RABBITMQ_HOST: str = "91.98.64.92"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
     RABBITMQ_PASS: str = "guest"
     RABBITMQ_VHOST: str = "default"
+    # Hardcoded em "ajeboxe" para nao trocar a fila existente em producao.
     RABBITMQ_QUEUE: str = "ajeboxe"
 
     # Redis
@@ -35,19 +45,46 @@ class Settings(BaseSettings):
     BLOCK_TTL_SECONDS: int = 3600
 
     # Alerta de atendimento humano
-    # Para trocar o número: edite ALERT_PHONE no arquivo .env
-    # Formato: somente dígitos, com DDI (ex: 5511999990000)
-    ALERT_PHONE: str = "5511989887525"
+    ALERT_PHONE: str = ""
 
-    # Whitelist de números que a IA pode responder.
-    # Formato: DDI+DDD+número (somente dígitos), separados por vírgula.
-    # Exemplo: "5511999990000,5521988887777"
-    # Se vazio, a IA responde para todos os números.
+    # Numeros que ignoram debounce (comma-separated)
+    DEBOUNCE_BYPASS_PHONES: str = ""
+
+    # Whitelist de numeros que a IA pode responder (comma-separated).
+    # Se vazio, responde para todos.
     ALLOWED_PHONES: str = ""
 
+    # CORS (comma-separated, use "*" para liberar todas as origens)
+    CORS_ORIGINS: str = "*"
+
+    @model_validator(mode="after")
+    def _fill_defaults_from_slug(self) -> "Settings":
+        if not self.RABBITMQ_QUEUE:
+            self.RABBITMQ_QUEUE = self.PROJECT_SLUG
+        if not self.UAZAPI_INSTANCE:
+            self.UAZAPI_INSTANCE = self.PROJECT_SLUG
+        if not self.WEBHOOK_PATH:
+            self.WEBHOOK_PATH = f"/{self.PROJECT_SLUG}"
+        return self
+
     @property
-    def allowed_phones_list(self) -> list[str]:
-        return [p.strip() for p in self.ALLOWED_PHONES.split(",") if p.strip()]
+    def debounce_bypass_set(self) -> set[str]:
+        if not self.DEBOUNCE_BYPASS_PHONES:
+            return set()
+        return {p.strip() for p in self.DEBOUNCE_BYPASS_PHONES.split(",") if p.strip()}
+
+    @property
+    def allowed_phones_set(self) -> set[str]:
+        if not self.ALLOWED_PHONES:
+            return set()
+        return {p.strip() for p in self.ALLOWED_PHONES.split(",") if p.strip()}
+
+    @property
+    def cors_origins(self) -> list[str]:
+        raw = (self.CORS_ORIGINS or "").strip()
+        if not raw or raw == "*":
+            return ["*"]
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
     @property
     def rabbitmq_url(self) -> str:

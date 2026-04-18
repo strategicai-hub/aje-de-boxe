@@ -1,0 +1,121 @@
+# ============================================================
+# DADOS DO NEGOCIO - AJE DE BOXE
+# ============================================================
+
+business:
+  name: "AJE DE BOXE"
+  type: "academia de boxe"
+  address: "RUA FREI MAURO, 31 - ADRIANÓPOLIS"
+
+assistant:
+  name: "Vic"
+  greeting: "Olá! Sou a Vic, tudo bem?"
+
+location:
+  parking: "Estacionamento facilitado ao lado do Empório DB V8"
+  structure: >
+    Banheiros feminino e masculino com chuveiros e espelhos de corpo inteiro,
+    ambiente climatizado com ar-condicionado, música e WiFi, ringue, sacos de
+    pancada tradicionais e diferenciados, equipamentos de musculação (halteres
+    e anilhas), itens para treino funcional, área de aquecimento, espaço para
+    alongamento, banheira para imersão no gelo, tatames e espelhos em todo o espaço.
+
+audience:
+  min_age: 7
+  max_age_note: "sem limite superior de idade (até 60+)"
+  levels: "iniciante, intermediário e avançado"
+  modalities:
+    - "Boxe tradicional"
+    - "Boxe Fitness (emagrecimento e resistência)"
+    - "Sparring (evolução técnica e competitiva)"
+    - "Preparação de competidores (local, nacional, internacional)"
+    - "Personal Fight (na academia ou em domicílio)"
+
+schedule:
+  class_duration: "1 hora"
+  class_note: "por agendamento, supervisionadas por professor especializado"
+  weekdays:
+    morning: ["5h", "6h", "7h", "8h", "9h", "10h"]
+    afternoon: ["14h", "15h", "16h", "17h"]
+    evening: ["18h", "19h", "20h", "21h"]
+  saturday:
+    morning: ["9h", "10h"]
+  sunday:
+    morning: ["10h"]
+
+teachers:
+  - name: "JACKSON DE PAULA VELASCO"
+    bio: >
+      Professor e treinador com trajetória consolidada no boxe, MMA e luta livre.
+      Experiência real de combate, didática clara e olhar técnico apurado.
+      Método: disciplina e constância, aprimoramento técnico real, treinos
+      intensos e inteligentes, fortalecimento mental. Transforma iniciantes em
+      praticantes confiantes e atletas em competidores preparados.
+  - name: "BÁRBARA BACELAR VELASCO"
+    bio: >
+      Mais de 5 anos de experiência no ensino do boxe. Formada em Psicologia e
+      certificada como professora treinadora de boxe por Carlos Fiola. Atuação
+      voltada para boxe fitness, com forte presença no público feminino. Trabalho
+      diferenciado com crianças e adolescentes. Aulas dinâmicas, motivadoras e
+      acessíveis.
+
+trial_class:
+  free: true
+  requires_scheduling: true
+  dress_code: "convencional de academia, descalço ou sapatilha de boxe"
+  equipment_note: >
+    Nas duas primeiras aulas não precisa de material. Na sequência o aluno
+    precisa ter material próprio (luvas e bandagem).
+
+plans:
+  - name: "Plano Mensal"
+    price: "R$ 250,00 por mês"
+    description: "Acesso livre a todos os horários, de segunda a domingo."
+  - name: "Plano Elite AJE 5AM e 23H"
+    price: "R$ 300,00 por mês"
+    description: "Treinos exclusivos nos horários 05h e 23h, segunda a sexta. Turmas reduzidas, ambiente focado. Vagas limitadas."
+  - name: "Plano Trimestral"
+    price: "R$ 600,00 por trimestre"
+    description: "Acesso livre a todos os horários, todos os dias. Melhor custo-benefício."
+  - name: "Plano Mensal Personal"
+    price: "R$ 800,00 por mês"
+    description: "Acompanhamento individualizado, horários agendados, de segunda a domingo."
+  - name: "Plano Mensal Personal Domicílio 2x/semana"
+    price: "R$ 800,00 por mês"
+    description: "8 aulas mensais na residência do aluno."
+  - name: "Plano Mensal Personal Domicílio 3x/semana"
+    price: "R$ 1.200,00 por mês"
+    description: "12 aulas mensais na residência do aluno."
+
+payment:
+  methods: ["PIX", "débito", "crédito"]
+  enrollment_fee: false
+  cancellation_fee: false
+  makeup_policy: "Reposição de aulas apenas nos planos Personal, com alinhamento prévio com o professor."
+
+benefit_platforms:
+  - name: "GymPass/WellHub"
+    note: "Acesso liberado a partir do plano BASIC."
+  - name: "TotalPass"
+    note: "Check-in obrigatório para aula experimental via plataforma."
+
+promotions:
+  - name: "PROJETO 30 DIAS DE TRANSFORMAÇÃO AJE"
+    details:
+      - "Aula experimental 100% gratuita"
+      - "Sem taxa de matrícula"
+      - "Acesso liberado a todos os treinos (domingo a domingo)"
+      - "Flexibilidade total de horários"
+      - "Treinos personalizados conforme objetivo"
+      - "Acompanhamento direto dos professores"
+      - "BÔNUS: aluno pode trazer 1 amigo(a) para treinar gratuitamente por 7 dias, com condição especial para matrícula ao final."
+      - "Condição especial para novos alunos que fecharem após a aula experimental."
+
+differentials:
+  - "Estrutura completa: ringue, sacos e área de musculação"
+  - "Professores de alto nível (Jackson Velasco e Bárbara Bacelar)"
+  - "Banheira de imersão para recuperação"
+  - "Sem taxa de matrícula e sem fidelidade"
+
+# Midias que a IA pode enviar via tags no prompt.
+media: {}
