@@ -23,7 +23,7 @@ x-common-env: &common-env
 
 services:
   aje-api:
-    image: ghcr.io/gustavocastilho-hub/aje-de-boxe:latest
+    image: ghcr.io/strategicai-hub/aje-de-boxe:latest
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     networks:
       - network_public
@@ -43,7 +43,7 @@ services:
         - "traefik.http.services.aje-de-boxe.loadbalancer.server.port=8000"
 
   aje-worker:
-    image: ghcr.io/gustavocastilho-hub/aje-de-boxe:latest
+    image: ghcr.io/strategicai-hub/aje-de-boxe:latest
     command: python worker.py
     networks:
       - network_public
