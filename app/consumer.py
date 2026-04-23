@@ -329,31 +329,31 @@ async def _process_message(msg: dict) -> None:
             log(_err(f"[TOOL WHATSAPP] Resultado: FALHA ao enviar {part['type']} ({i+1}/{len(parts)}) - {e}"))
             logger.exception("Erro ao enviar %s para %s", part["type"], phone)
 
-    # J) Alerta de atendimento humano
-    if transferir:
-        asyncio.create_task(_maybe_send_alert(phone, lead, unified_msg))
-
-    # K) Pos-envio: finalizacao + resumo em background
+    # J) Finalizacao (antes das tasks paralelas para que o status fique refletido no resumo)
     if finalizado:
         await rds.set_block(phone)
         await rds.update_lead(phone, status_conversa="Finalizado")
         log(_ok(f"[{phone}] Conversa marcada como finalizada"))
 
-    asyncio.create_task(_update_summary_and_sheets(phone, lead.get("name", "")))
+    # K) Alerta + resumo/sheets em paralelo, aguardando ambos antes de salvar o log de sessao
+    bg_tasks = [_update_summary_and_sheets(phone, lead.get("name", ""))]
+    if transferir:
+        bg_tasks.append(_maybe_send_alert(phone, lead, unified_msg))
+    await asyncio.gather(*bg_tasks, return_exceptions=True)
 
     _save_session_log(phone)
 
 
 async def _maybe_send_alert(phone: str, lead: dict, user_msg: str) -> None:
-    """Envia alerta de atendimento humano. Chamada apenas quando a IA emite [TRANSFERIR=1]."""
-    _begin_session_log()
+    """Envia alerta de atendimento humano. Chamada apenas quando a IA emite [TRANSFERIR=1].
+
+    Compartilha o buffer de log da coroutine pai (nao chama _begin_session_log nem _save_session_log).
+    """
     if not settings.ALERT_PHONE:
         log(_warn(f"[TOOL ALERTA_EQUIPE] Nao acionado - ALERT_PHONE nao configurado"))
-        _save_session_log(phone)
         return
     if await rds.is_alert_sent(phone):
         log(f"[TOOL ALERTA_EQUIPE] Ignorado - alerta ja enviado recentemente para {phone}")
-        _save_session_log(phone)
         return
 
     contact = lead.get("name", "") or phone
@@ -368,16 +368,16 @@ async def _maybe_send_alert(phone: str, lead: dict, user_msg: str) -> None:
         await uazapi.send_text(settings.ALERT_PHONE, alert_text)
         await rds.set_alert_sent(phone)
         log(_ok(f"[TOOL ALERTA_EQUIPE] Resultado: SUCESSO - equipe notificada sobre {phone}"))
-        _save_session_log(phone)
     except Exception as e:
         log(_err(f"[TOOL ALERTA_EQUIPE] Resultado: FALHA - {e}"))
         logger.exception("Erro ao enviar alerta de atendimento humano: %s", e)
-        _save_session_log(phone)
 
 
 async def _update_summary_and_sheets(phone: str, name: str) -> None:
-    """Gera resumo da conversa, salva no Redis e na planilha do Google."""
-    _begin_session_log()
+    """Gera resumo da conversa, salva no Redis e na planilha do Google.
+
+    Compartilha o buffer de log da coroutine pai (nao chama _begin_session_log nem _save_session_log).
+    """
     log(f"[TOOL RESUMO] Executando generate_summary(phone={phone})")
     resumo = ""
     try:
@@ -403,8 +403,6 @@ async def _update_summary_and_sheets(phone: str, name: str) -> None:
     except Exception as e:
         log(_err(f"[TOOL SHEETS] Resultado: EXCECAO - {e}"))
         logger.exception("Erro ao atualizar sheets para %s: %s", phone, e)
-    finally:
-        _save_session_log(phone)
 
 
 async def start_consumer() -> None:
