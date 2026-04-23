@@ -33,6 +33,10 @@ def alert_key(phone: str) -> str:
     return f"{_phone_ns(phone)}:alert"
 
 
+def mute_key(phone: str) -> str:
+    return f"{_phone_ns(phone)}:mute"
+
+
 def followup_active_key(phone: str) -> str:
     return f"{_phone_ns(phone)}:followup:active"
 

@@ -26,6 +26,18 @@ async def is_blocked(phone: str) -> bool:
     return await r.exists(keys.block_key(phone)) == 1
 
 
+# --------------- mute em lote (intocavel, TTL proprio) ---------------
+
+async def set_mute(phone: str, ttl: int) -> None:
+    r = await get_redis()
+    await r.set(keys.mute_key(phone), "1", ex=ttl)
+
+
+async def is_muted(phone: str) -> bool:
+    r = await get_redis()
+    return await r.exists(keys.mute_key(phone)) == 1
+
+
 # --------------- buffer de mensagens (debounce) ---------------
 
 async def push_buffer(phone: str, text: str) -> int:

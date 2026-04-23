@@ -12,16 +12,21 @@ def client_and_published(monkeypatch):
     import app.main as main_mod
 
     published: list[dict] = []
+    muted: set[str] = set()
 
     async def fake_publish(message: dict) -> None:
         published.append(message)
 
+    async def fake_is_muted(phone: str) -> bool:
+        return phone in muted
+
     monkeypatch.setattr(webhook_mod, "publish", fake_publish)
-    return TestClient(main_mod.app), published
+    monkeypatch.setattr(webhook_mod.rds, "is_muted", fake_is_muted)
+    return TestClient(main_mod.app), published, muted
 
 
 def test_ignores_own_messages_from_n8n(client_and_published):
-    client, pub = client_and_published
+    client, pub, _muted = client_and_published
     r = client.post("/testslug", json={"message": {"track_source": "n8n", "text": "x"}})
     assert r.status_code == 200
     assert r.json()["status"] == "ignored"
@@ -29,21 +34,21 @@ def test_ignores_own_messages_from_n8n(client_and_published):
 
 
 def test_ignores_ia_source(client_and_published):
-    client, pub = client_and_published
+    client, pub, _muted = client_and_published
     r = client.post("/testslug", json={"message": {"track_source": "IA", "text": "x"}})
     assert r.json()["status"] == "ignored"
     assert pub == []
 
 
 def test_ignores_when_no_phone(client_and_published):
-    client, pub = client_and_published
+    client, pub, _muted = client_and_published
     r = client.post("/testslug", json={"message": {"text": "oi"}})
     assert r.json()["status"] == "ignored"
     assert pub == []
 
 
 def test_queues_text_message(client_and_published):
-    client, pub = client_and_published
+    client, pub, _muted = client_and_published
     r = client.post("/testslug", json={
         "message": {
             "sender_pn": "5511999990000@c.us",
@@ -62,7 +67,7 @@ def test_queues_text_message(client_and_published):
 
 
 def test_queues_audio_message(client_and_published):
-    client, pub = client_and_published
+    client, pub, _muted = client_and_published
     r = client.post("/testslug", json={
         "message": {
             "sender_pn": "5511888880000@c.us",
@@ -76,7 +81,7 @@ def test_queues_audio_message(client_and_published):
 
 
 def test_ignores_unknown_message_type(client_and_published):
-    client, pub = client_and_published
+    client, pub, _muted = client_and_published
     r = client.post("/testslug", json={
         "message": {"sender_pn": "5511999990000@c.us", "messageType": "stickerMessage"}
     })
@@ -85,7 +90,22 @@ def test_ignores_unknown_message_type(client_and_published):
 
 
 def test_health_endpoint(client_and_published):
-    client, _ = client_and_published
+    client, _pub, _muted = client_and_published
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
+
+
+def test_muted_phone_not_published(client_and_published):
+    client, pub, muted = client_and_published
+    muted.add("5511999990000")
+    r = client.post("/testslug", json={
+        "message": {
+            "sender_pn": "5511999990000@c.us",
+            "senderName": "Fulano",
+            "text": "oi",
+        }
+    })
+    assert r.status_code == 200
+    assert r.json() == {"status": "ignored", "reason": "muted"}
+    assert pub == []

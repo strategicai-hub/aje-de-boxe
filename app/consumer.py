@@ -192,6 +192,11 @@ async def _process_message(msg: dict) -> None:
         logger.info("Agente bloqueado para %s - ignorando", chat_id)
         return
 
+    # C.1) Verifica mute em lote (TTL proprio, nao afetado por set_block)
+    if await rds.is_muted(phone):
+        logger.info("Phone %s mutado - ignorando", chat_id)
+        return
+
     # D) Filtra grupos
     if _is_group(chat_id):
         return

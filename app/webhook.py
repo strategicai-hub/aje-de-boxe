@@ -8,6 +8,7 @@ import logging
 from fastapi import APIRouter, Request
 
 from app.config import settings
+from app.services import redis_service as rds
 from app.services.rabbitmq import publish
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,14 @@ async def webhook(request: Request):
             phone, msg_type, json.dumps(payload)[:2000],
         )
         return {"status": "ignored", "reason": "no phone or unsupported message"}
+
+    # Mute em lote: numeros silenciados nao entram na fila
+    try:
+        if await rds.is_muted(phone):
+            logger.info("Phone %s esta mutado - nao publicado na fila", phone)
+            return {"status": "ignored", "reason": "muted"}
+    except Exception as e:
+        logger.warning("Falha ao checar mute no Redis para %s: %s - seguindo com publish", phone, e)
 
     queue_message = {
         "phone": phone,
