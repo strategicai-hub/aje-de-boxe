@@ -27,6 +27,7 @@ async def chat(phone: str, user_message: str, lead_name: str = "") -> tuple[str,
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash",
         system_instruction=SYSTEM_PROMPT,
+        generation_config=genai.GenerationConfig(temperature=0.4),
     )
 
     chat_session = model.start_chat(history=history)
@@ -49,7 +50,10 @@ async def chat(phone: str, user_message: str, lead_name: str = "") -> tuple[str,
 
 async def transcribe_audio(audio_bytes: bytes) -> str:
     _ensure_configured()
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel(
+        "gemini-2.5-flash",
+        generation_config=genai.GenerationConfig(temperature=0.2),
+    )
 
     audio_part = {
         "mime_type": "audio/ogg",
@@ -79,7 +83,10 @@ async def generate_summary(phone: str) -> str:
     if not lines:
         return ""
 
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel(
+        "gemini-2.5-flash",
+        generation_config=genai.GenerationConfig(temperature=0.4),
+    )
     client = load_client_data()
     business_type = (client.get("business", {}) or {}).get("type", "negocio")
     prompt = (
@@ -97,7 +104,10 @@ async def generate_summary(phone: str) -> str:
 
 async def analyze_image(image_bytes: bytes) -> str:
     _ensure_configured()
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel(
+        "gemini-2.5-flash",
+        generation_config=genai.GenerationConfig(temperature=0.2),
+    )
 
     image_part = {
         "mime_type": "image/jpeg",

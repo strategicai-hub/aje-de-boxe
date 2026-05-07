@@ -79,7 +79,7 @@ async def append_chat_history(phone: str, role: str, text: str) -> None:
     entry_type = "ai" if role == "model" else "human"
     entry = json.dumps({"type": entry_type, "data": {"content": text}}, ensure_ascii=False)
     await r.rpush(keys.history_key(phone), entry)
-    await r.ltrim(keys.history_key(phone), -50, -1)  # manter ultimas 50 msgs
+    await r.ltrim(keys.history_key(phone), -10, -1)  # manter ultimas 10 msgs
 
 
 async def clear_chat_history(phone: str) -> None:
