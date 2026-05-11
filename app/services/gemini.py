@@ -27,7 +27,10 @@ async def chat(phone: str, user_message: str, lead_name: str = "") -> tuple[str,
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash",
         system_instruction=SYSTEM_PROMPT,
-        generation_config=genai.GenerationConfig(temperature=0.4),
+        generation_config=genai.GenerationConfig(
+            temperature=0.4,
+            max_output_tokens=300,
+        ),
     )
 
     chat_session = model.start_chat(history=history)
@@ -85,7 +88,10 @@ async def generate_summary(phone: str) -> str:
 
     model = genai.GenerativeModel(
         "gemini-2.5-flash",
-        generation_config=genai.GenerationConfig(temperature=0.4),
+        generation_config=genai.GenerationConfig(
+            temperature=0.4,
+            max_output_tokens=150,
+        ),
     )
     client = load_client_data()
     business_type = (client.get("business", {}) or {}).get("type", "negocio")

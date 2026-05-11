@@ -340,8 +340,13 @@ async def _process_message(msg: dict) -> None:
         await rds.update_lead(phone, status_conversa="Finalizado")
         log(_ok(f"[{phone}] Conversa marcada como finalizada"))
 
-    # K) Alerta + resumo/sheets em paralelo, aguardando ambos antes de salvar o log de sessao
-    bg_tasks = [_update_summary_and_sheets(phone, lead.get("name", ""))]
+    # K) Alerta + resumo/sheets em paralelo. Resumo so e gerado quando a conversa
+    # finaliza ou e transferida (evita chamada extra ao Gemini em cada turno).
+    bg_tasks = []
+    if finalizado or transferir:
+        bg_tasks.append(_update_summary_and_sheets(phone, lead.get("name", "")))
+    else:
+        bg_tasks.append(_update_sheets_only(phone, lead.get("name", "")))
     if transferir:
         bg_tasks.append(_maybe_send_alert(phone, lead, unified_msg))
     await asyncio.gather(*bg_tasks, return_exceptions=True)
@@ -376,6 +381,26 @@ async def _maybe_send_alert(phone: str, lead: dict, user_msg: str) -> None:
     except Exception as e:
         log(_err(f"[TOOL ALERTA_EQUIPE] Resultado: FALHA - {e}"))
         logger.exception("Erro ao enviar alerta de atendimento humano: %s", e)
+
+
+async def _update_sheets_only(phone: str, name: str) -> None:
+    """Atualiza apenas a planilha (sem gerar resumo) - usado em mensagens intermediarias.
+
+    Pula a chamada ao Gemini para `generate_summary`, que so faz sentido quando
+    a conversa termina (finalizado ou transferida).
+    """
+    log(f"[TOOL SHEETS] Executando upsert_lead(phone={phone}) sem resumo")
+    try:
+        lead = await rds.get_lead(phone)
+        sheets_service.upsert_lead(
+            phone=phone,
+            name=lead.get("name", name) if lead else name,
+            resumo=(lead or {}).get("resumo", ""),
+        )
+        log(_ok(f"[TOOL SHEETS] Resultado: SUCESSO - lead atualizado na planilha"))
+    except Exception as e:
+        log(_err(f"[TOOL SHEETS] Resultado: EXCECAO - {e}"))
+        logger.exception("Erro ao atualizar sheets para %s: %s", phone, e)
 
 
 async def _update_summary_and_sheets(phone: str, name: str) -> None:
