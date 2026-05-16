@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter, Request
 
 from app.config import settings
-from app.services import redis_service as rds
+from app.services import redis_service as rds, uazapi
 from app.services.rabbitmq import publish
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,18 @@ async def webhook(request: Request):
             phone, msg_type, json.dumps(payload)[:2000],
         )
         return {"status": "ignored", "reason": "no phone or unsupported message"}
+
+    # /reset instantaneo — apaga TUDO do numero (history, buffer, block, alert,
+    # mute, followup ativo, lead) antes de qualquer outra checagem. Permite ao
+    # lead destravar o bot mesmo se estiver bloqueado/mutado.
+    if (text or "").strip().lower() == "/reset":
+        await rds.reset_lead_state(phone)
+        try:
+            await uazapi.send_text(phone, "Conversa reiniciada.")
+        except Exception as e:
+            logger.error("[%s] Falha ao confirmar reset: %s", phone, e)
+        logger.info("[%s] Reset instantaneo via webhook", phone)
+        return {"status": "reset"}
 
     # Mute em lote: numeros silenciados nao entram na fila
     try:
