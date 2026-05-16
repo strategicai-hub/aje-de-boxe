@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # App
     WEBHOOK_PATH: str = "/ajeboxe"
     DEBOUNCE_SECONDS: int = 30
-    BLOCK_TTL_SECONDS: int = 3600
+    BLOCK_TTL_SECONDS: int | None = None  # deprecated: TTL agora é calculado dinamicamente até amanhã 08:00 SP
 
     # Alerta de atendimento humano
     ALERT_PHONE: str = ""
