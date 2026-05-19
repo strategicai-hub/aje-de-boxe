@@ -2,7 +2,7 @@
 
 Decisões importantes:
 - Usa `google-genai` (novo SDK oficial). Evitar `google-generativeai` (legado).
-- `thinking_budget=0` em todas as chamadas: o gemini-2.5-flash gera tokens
+- `include_thoughts=False` em todas as chamadas: o gemini-2.5-flash gera tokens
   de raciocinio internos por padrao, cobrados como output. Desligar reduz
   drasticamente o custo em bots conversacionais simples.
 - `temperature=0.4` no chat (saidas naturais e pouco aleatorias) e 0.2 em
@@ -88,7 +88,7 @@ async def chat(phone: str, user_message: str, lead_name: str = "") -> tuple[str,
         system_instruction=get_system_prompt(),
         temperature=0.4,
         max_output_tokens=300,
-        thinking_config=gtypes.ThinkingConfig(thinking_budget=0),
+        thinking_config=gtypes.ThinkingConfig(include_thoughts=False),
     )
 
     response = await asyncio.to_thread(
@@ -126,7 +126,7 @@ async def transcribe_audio(audio_bytes: bytes) -> str:
         ],
         config=gtypes.GenerateContentConfig(
             temperature=0.2,
-            thinking_config=gtypes.ThinkingConfig(thinking_budget=0),
+            thinking_config=gtypes.ThinkingConfig(include_thoughts=False),
         ),
     )
     return (response.text or "").strip()
@@ -165,7 +165,7 @@ async def generate_summary(phone: str) -> str:
             config=gtypes.GenerateContentConfig(
                 temperature=0.4,
                 max_output_tokens=150,
-                thinking_config=gtypes.ThinkingConfig(thinking_budget=0),
+                thinking_config=gtypes.ThinkingConfig(include_thoughts=False),
             ),
         )
         return (response.text or "").strip()
@@ -190,7 +190,7 @@ async def analyze_image(image_bytes: bytes) -> str:
         ],
         config=gtypes.GenerateContentConfig(
             temperature=0.2,
-            thinking_config=gtypes.ThinkingConfig(thinking_budget=0),
+            thinking_config=gtypes.ThinkingConfig(include_thoughts=False),
         ),
     )
     return (response.text or "").strip()
