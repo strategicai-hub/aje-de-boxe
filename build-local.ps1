@@ -54,7 +54,7 @@ if (-not ($buildxList | Select-String $builderName)) {
     docker buildx use $builderName | Out-Null
 }
 $metaFile = Join-Path $env:TEMP "aje-de-boxe-meta.json"
-docker buildx build --platform linux/amd64 --push --tag $IMAGE --metadata-file $metaFile $projectRoot
+cmd /c "docker buildx build --platform linux/amd64 --push --tag $IMAGE --metadata-file `"$metaFile`" `"$projectRoot`" 2>&1"
 if ($LASTEXITCODE -ne 0) { Write-Error "Build falhou." }
 $meta   = Get-Content $metaFile -Raw | ConvertFrom-Json
 $DIGEST = $meta."containerimage.digest"
