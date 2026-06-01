@@ -240,6 +240,9 @@ async def _process_message(msg: dict) -> None:
     if _is_group(chat_id):
         return
 
+    # Marca a mensagem como lida (tiques azuis) assim que o bot a "ve".
+    await uazapi.mark_read(phone)
+
     # Cadastro de lead
     lead = await rds.get_lead(phone)
     if not lead:
@@ -307,6 +310,9 @@ async def _process_message(msg: dict) -> None:
     unified_msg = "\n".join(messages)
     log(_msg(f"[{phone} - {push_name}] {unified_msg[:300]}"))
 
+    # "Digitando..." enquanto a IA pensa/responde.
+    await uazapi.send_presence(phone, "composing")
+
     # G) Processamento com IA (com retry)
     log(f"[TOOL GEMINI] Executando chat(phone={phone}, msg_len={len(unified_msg)})")
     ai_response = ""
@@ -347,6 +353,8 @@ async def _process_message(msg: dict) -> None:
     for i, part in enumerate(parts):
         try:
             if part["type"] == "text":
+                await uazapi.send_presence(phone, "composing")
+                await asyncio.sleep(1.5)
                 await uazapi.send_text(phone, part["content"])
             elif part["type"] == "image":
                 await uazapi.send_image(phone, part["content"])

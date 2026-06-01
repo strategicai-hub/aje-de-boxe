@@ -64,6 +64,39 @@ async def send_text(number: str, text: str, delay: int = 4000) -> dict:
     return data
 
 
+async def send_presence(number: str, presence: str = "composing") -> None:
+    """Emite presenca (digitando.../gravando.../online) para o numero.
+
+    Endpoint correto deste servidor UAZAPI: POST /message/presence com
+    {number, presence}. NAO usar /chat/presence nem /send/presence (405).
+    Presenca e efemera — chamar antes de cada balao para o usuario ver
+    "digitando..." enquanto a IA gera/responde.
+    """
+    url = f"{settings.UAZAPI_BASE_URL}/message/presence"
+    payload = {"number": number, "presence": presence}
+    try:
+        client = _get_client()
+        resp = await client.post(url, content=_json_body(payload), headers=_headers())
+        resp.raise_for_status()
+    except Exception as e:
+        logger.warning("Falha ao enviar presence %s para %s: %s", presence, number, e)
+
+
+async def mark_read(number: str) -> None:
+    """Marca o chat como lido (tiques azuis) para o numero.
+
+    Endpoint correto deste servidor UAZAPI: POST /chat/read com {number}.
+    """
+    url = f"{settings.UAZAPI_BASE_URL}/chat/read"
+    payload = {"number": number}
+    try:
+        client = _get_client()
+        resp = await client.post(url, content=_json_body(payload), headers=_headers())
+        resp.raise_for_status()
+    except Exception as e:
+        logger.warning("Falha ao marcar chat lido para %s: %s", number, e)
+
+
 async def _send_media(number: str, media_type: str, file_url: str, delay: int = 4000) -> dict:
     url = f"{settings.UAZAPI_BASE_URL}/send/media"
     payload = {
