@@ -22,7 +22,7 @@ O redeploy **não depende do GitHub Actions**. Claude executa o build e o force-
 
 ### Dados do deploy
 
-- **Portainer URL:** https://91.98.64.92:9443
+- **Portainer URL:** https://portainer.strategicai.com.br
 - **Endpoint (ID):** `1` (local-swarm)
 - **Stack (ID / nome):** `49` / `aje-de-boxe`
 - **Imagem Docker (tag):** `ghcr.io/gustavocastilho-hub/aje-de-boxe:latest`
@@ -42,7 +42,7 @@ Credenciais (`PORTAINER_TOKEN`, `GITHUB_TOKEN`) estão em `.env` na raiz do proj
    ```
 3. Build via Portainer API (endpoint `1`, tag `ghcr.io/gustavocastilho-hub/aje-de-boxe:latest`, `nocache=true`):
    ```
-   POST https://91.98.64.92:9443/api/endpoints/1/docker/build?t=ghcr.io/gustavocastilho-hub/aje-de-boxe:latest&nocache=true
+   POST https://portainer.strategicai.com.br/api/endpoints/1/docker/build?t=ghcr.io/gustavocastilho-hub/aje-de-boxe:latest&nocache=true
    Header: X-API-Key: $PORTAINER_TOKEN
    Header: Content-Type: application/x-tar
    Body: conteúdo do tarball
