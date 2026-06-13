@@ -25,8 +25,13 @@ from app.services.redis_service import get_chat_history, append_chat_history
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "gemini-2.5-flash"
+_MODEL = "gemini-3.1-flash-lite"
 _client: Optional[genai.Client] = None
+
+# `_THINKING_DYNAMIC` (sem teto): só no chat principal, deixa o modelo raciocinar.
+# `_THINKING_OFF` (budget=0): nas chamadas auxiliares, para não pagar thinking nem truncar.
+_THINKING_DYNAMIC = gtypes.ThinkingConfig(include_thoughts=False)
+_THINKING_OFF = gtypes.ThinkingConfig(thinking_budget=0, include_thoughts=False)
 
 _SP_TZ = ZoneInfo("America/Sao_Paulo")
 _WEEK = [
@@ -87,7 +92,7 @@ async def chat(phone: str, user_message: str, lead_name: str = "") -> tuple[str,
     config = gtypes.GenerateContentConfig(
         system_instruction=get_system_prompt(),
         temperature=0.4,
-        thinking_config=gtypes.ThinkingConfig(include_thoughts=False),
+        thinking_config=_THINKING_DYNAMIC,
     )
 
     response = await asyncio.to_thread(
@@ -125,7 +130,7 @@ async def transcribe_audio(audio_bytes: bytes) -> str:
         ],
         config=gtypes.GenerateContentConfig(
             temperature=0.2,
-            thinking_config=gtypes.ThinkingConfig(include_thoughts=False),
+            thinking_config=_THINKING_OFF,
         ),
     )
     return (response.text or "").strip()
@@ -164,7 +169,7 @@ async def generate_summary(phone: str) -> str:
             config=gtypes.GenerateContentConfig(
                 temperature=0.4,
                 max_output_tokens=150,
-                thinking_config=gtypes.ThinkingConfig(include_thoughts=False),
+                thinking_config=_THINKING_OFF,
             ),
         )
         return (response.text or "").strip()
@@ -189,7 +194,7 @@ async def analyze_image(image_bytes: bytes) -> str:
         ],
         config=gtypes.GenerateContentConfig(
             temperature=0.2,
-            thinking_config=gtypes.ThinkingConfig(include_thoughts=False),
+            thinking_config=_THINKING_OFF,
         ),
     )
     return (response.text or "").strip()
