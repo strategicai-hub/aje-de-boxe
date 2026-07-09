@@ -2,7 +2,7 @@
 
 Decisões importantes:
 - Usa `google-genai` (novo SDK oficial). Evitar `google-generativeai` (legado).
-- `include_thoughts=False` em todas as chamadas: o gemini-3.5-flash gera tokens
+- `include_thoughts=False` em todas as chamadas: o gemini-3.1-flash-lite gera tokens
   de raciocinio internos por padrao, cobrados como output. Desligar reduz
   drasticamente o custo em bots conversacionais simples.
 - `temperature=0.4` no chat (saidas naturais e pouco aleatorias) e 0.2 em
